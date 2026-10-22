@@ -96,6 +96,36 @@ def natural(code):
     return (m.group(1), int(m.group(2)) if m.group(2) else 10**6, m.group(3))
 
 
+def verso(short, trip_name):
+    """'A' o 'R' dal codice corsa ('CV1 A', 'Angn 2-B-R', 'LA9A', 'LA21-varA', 'LA22 VAR-R'), altrimenti ''."""
+    key = re.sub(r"\s+", "", short).lower()
+    name = re.sub(r"\s+", " ", trip_name).strip().lower()
+    compact = name.replace(" ", "")
+    rest = compact[len(key):] if compact.startswith(key) else name
+    tokens = [re.sub(r"^var", "", x) for x in re.split(r"[\s\-]+", rest) if x]
+    tokens = [x for x in tokens if x in ("a", "r")]
+    return tokens[-1].upper() if tokens else ""
+
+
+def directions(rtrips, short, st_by_trip, stops):
+    """Direzione di ogni corsa. Il GTFS mette quasi tutto in direction_id 0, anche andata e ritorno:
+    se la linea ha corse marcate A e R nel codice si usa quello; le corse senza marca vanno con la
+    direzione il cui capolinea d'arrivo è più vicino al loro."""
+    marks = {t["trip_id"]: verso(short, t.get("trip_short_name") or "") for t in rtrips}
+    if not {"A", "R"} <= set(marks.values()):
+        return {t["trip_id"]: t["direction_id"] or "0" for t in rtrips}
+
+    def end(t):
+        s = stops[st_by_trip[t["trip_id"]][-1]["stop_id"]]
+        return (float(s["stop_lat"]), float(s["stop_lon"]))
+    ends = {m: Counter(end(t) for t in rtrips if marks[t["trip_id"]] == m).most_common(1)[0][0] for m in "AR"}
+    out = {}
+    for t in rtrips:
+        m = marks[t["trip_id"]] or min("AR", key=lambda x: km_between(end(t), ends[x]))
+        out[t["trip_id"]] = "0" if m == "A" else "1"
+    return out
+
+
 def area_of(short):
     for k in sorted(COMUNI, key=len, reverse=True):
         if short.startswith(k):
@@ -332,10 +362,15 @@ def build(zpath):
             continue
         tabs = []
         groups = defaultdict(list)
+        dirs = directions(rtrips, r["route_short_name"], st_by_trip, stops)
         for t in rtrips:
-            groups[(t["service_id"], t["direction_id"] or "0")].append(t)
+            groups[(t["service_id"], dirs[t["trip_id"]])].append(t)
         for (svc, d), ts in sorted(groups.items(), key=lambda kv: (used_svc.index(kv[0][0]), kv[0][1])):
             tabs.append(make_tab(svc, d, ts, st_by_trip, names, stop_idx, route_lines))
+        if len({t["titolo"] for t in tabs}) < len({(t["titolo"], t["dir"]) for t in tabs}):
+            # due direzioni con lo stesso titolo (giri nei due sensi): si distinguono
+            for t in tabs:
+                t["titolo"] += " (andata)" if t["dir"] == "0" else " (ritorno)"
         color = (r.get("route_color") or "").strip()
         shp = sorted({t["shape_id"] for t in rtrips})
         linee.append({
@@ -417,6 +452,9 @@ def make_tab(svc, d, ts, st_by_trip, names, stop_idx, route_lines):
     last = names[rows[-1][0]][0]
     titolo = heads.most_common(1)[0][0] if heads else last
     titolo = re.sub(r"\s*\((Andata|Ritorno)\)\s*$", "", titolo)
+    nome, com = split_stop_name(titolo)  # "GENAZZANO | Castello Colonna" -> "Genazzano - Castello Colonna"
+    if "|" in clean_name(titolo) and com:
+        titolo = f"{com} - {nome}"
     return {"svc": svc, "dir": d, "titolo": titolo, "fermate": [stop_idx[sid] for sid, _ in rows],
             "princ": princ, "corse": corse}
 
