@@ -98,10 +98,9 @@ def natural(code):
 
 def verso(short, trip_name):
     """'A' o 'R' dal codice corsa ('CV1 A', 'Angn 2-B-R', 'LA9A', 'LA21-varA', 'LA22 VAR-R'), altrimenti ''."""
-    key = re.sub(r"\s+", "", short).lower()
+    key = r"\s*".join(map(re.escape, re.sub(r"\s+", "", short).lower()))
     name = re.sub(r"\s+", " ", trip_name).strip().lower()
-    compact = name.replace(" ", "")
-    rest = compact[len(key):] if compact.startswith(key) else name
+    rest = re.sub("^" + key, "", name)  # "zgrl4 scol r" -> " scol r", "angn 2-b-r" -> "-b-r"
     tokens = [re.sub(r"^var", "", x) for x in re.split(r"[\s\-]+", rest) if x]
     tokens = [x for x in tokens if x in ("a", "r")]
     return tokens[-1].upper() if tokens else ""
@@ -405,20 +404,27 @@ def make_tab(svc, d, ts, st_by_trip, names, stop_idx, route_lines):
     main = Counter(tuple(k) for k in ks).most_common()
     main = max(main, key=lambda kv: (kv[1], len(kv[0])))[0]
     rows = list(main)
+    extra = Counter()
+    trip_rows = []  # per ogni corsa, la riga del quadro di ciascuna sua fermata
     for k in ks:
-        prev = -1
+        prev, mine = -1, []
         for key in k:
-            if key in rows:
-                at = rows.index(key)
-                if at > prev:
-                    prev = at
-            else:
-                rows.insert(prev + 1, key)
-                prev += 1
+            # la stessa fermata più avanti nel quadro; se la corsa ci passa in un ordine diverso
+            # (varianti) si aggiunge una riga, così gli orari della corsa restano in ordine
+            at = next((i for i in range(prev + 1, len(rows)) if rows[i][0] == key[0] and
+                       (rows[i] == key or rows[i] not in k)), None)
+            if at is None:
+                extra[key[0]] += 1
+                row = key if key not in rows else (key[0], f"x{extra[key[0]]}")
+                rows.insert(prev + 1, row)
+                at = prev + 1
+            mine.append(rows[at])
+            prev = at
+        trip_rows.append(mine)
     pos = {key: i for i, key in enumerate(rows)}
 
     corse = []
-    for t, k in zip(ts, ks):
+    for t, k in zip(ts, trip_rows):
         o = [None] * len(rows)
         for key, r in zip(k, st_by_trip[t["trip_id"]]):
             o[pos[key]] = minutes(r["departure_time"] or r["arrival_time"])
