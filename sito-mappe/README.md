@@ -33,6 +33,9 @@ colonna a parte); le fermate senza comune nel nome prendono quello della fermata
 - `build_data.py`: legge il GTFS e scrive il sito completo in `sito-mappe/index.html` (pubblicato online) e
   `index.html` nella radice del repo.
 
+Online (GitHub Pages) viene pubblicato **solo** `index.html`: script, modello, README e file GTFS restano nel
+repository e non sono raggiungibili dall'indirizzo del sito. La pagina non mostra il nome del file GTFS.
+
 ## Aggiornare con un nuovo GTFS
 
 **Da GitHub**: *Add file → Upload files*, trascina il nuovo zip GTFS e fai *Commit changes* su `main`.
