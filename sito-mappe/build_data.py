@@ -55,9 +55,6 @@ NEAR_MAX_KM = 3.0
 PRINC_OGNI_MIN = 5      # almeno una fermata principale ogni 5 minuti di viaggio
 PRINC_NODO_LINEE = 4    # nodo di interscambio: fermata servita da almeno 4 altre linee
 
-NOTA_PRINCIPALI = ("Il GTFS non indica le fermate principali: qui sono i capolinea, la prima fermata "
-                   "in ogni comune, i nodi serviti da almeno 4 altre linee e una fermata almeno ogni 5 minuti di viaggio.")
-
 GIORNI = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
 
 
@@ -74,7 +71,16 @@ def find_gtfs():
         except OSError:
             return 0
 
-    return max(zips, key=lambda z: (committed(z), os.path.getmtime(z)))
+    def calendar_end(path):
+        # a parità di commit (zip caricati insieme) vince il GTFS con il calendario che finisce più tardi
+        try:
+            zf = zipfile.ZipFile(path)
+            ends = [c["end_date"] for c in read(zf, "calendar.txt")] + [c["date"] for c in read(zf, "calendar_dates.txt")]
+            return max(ends) if ends else ""
+        except (zipfile.BadZipFile, KeyError):
+            return ""
+
+    return max(zips, key=lambda z: (committed(z), calendar_end(z), os.path.getmtime(z)))
 
 
 def read(zf, name):
@@ -340,16 +346,12 @@ def build(zpath):
 
     linee.sort(key=lambda l: (l["area"] == "Linee intercomunali", l["area"], natural(l["n"])))
     all_dates = [d for v in servizi.values() for d in v["date"]]
-    ver = re.search(r"(\d{8})T(\d{4})", os.path.basename(zpath))
     return {
         "agenzia": {"nome": agency.get("agency_name", ""), "url": agency.get("agency_url", ""),
                     "tel": agency.get("agency_phone", "")},
-        "feed": {"dal": min(all_dates), "al": max(all_dates),
-                 "versione": (f"esportato il {ver.group(1)[6:]}/{ver.group(1)[4:6]}/{ver.group(1)[:4]} "
-                              f"alle {ver.group(2)[:2]}:{ver.group(2)[2:]}") if ver else "",
-                 "file": os.path.basename(zpath)},
+        # nel sito pubblicato non compaiono il nome del file GTFS né dettagli tecnici
+        "feed": {"dal": min(all_dates), "al": max(all_dates)},
         "servizi": servizi, "fermate": fermate, "shapes": shapes, "shape_km": shape_km, "linee": linee,
-        "nota_principali": NOTA_PRINCIPALI,
     }
 
 
