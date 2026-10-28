@@ -353,6 +353,14 @@ def build(zpath):
             com = names[r["stop_id"]][1]
             if com:
                 passaggi[t["route_id"]][com] += 1
+    # comuni attraversati nell'ordine del percorso: prima la corsa con più fermate, poi le altre
+    comuni_linea = defaultdict(list)
+    for t in sorted(trips, key=lambda t: -len(st_by_trip[t["trip_id"]])):
+        seen = comuni_linea[t["route_id"]]
+        for r in st_by_trip[t["trip_id"]]:
+            com = names[r["stop_id"]][1]
+            if com and com not in seen:
+                seen.append(com)
     routes = sorted(routes, key=lambda r: natural(r["route_short_name"]))
     colors = line_colors(len(routes))
     linee = []
@@ -375,7 +383,7 @@ def build(zpath):
         shp = sorted({t["shape_id"] for t in rtrips})
         linee.append({
             "id": r["route_short_name"], "n": r["route_short_name"], "nome": r["route_long_name"] or r["route_short_name"],
-            "area": area_of(r["route_short_name"]), "comuni": sorted(passaggi[r["route_id"]]), "col": "#" + color.upper() if color else colors[ri],
+            "area": area_of(r["route_short_name"]), "comuni": comuni_linea[r["route_id"]], "col": "#" + color.upper() if color else colors[ri],
             "shapes": shp, "km": max(shape_km[s] for s in shp), "tab": tabs,
         })
 
