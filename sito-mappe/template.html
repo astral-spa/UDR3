@@ -731,6 +731,7 @@ aside.index { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 .lines button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .lines .nm { font-size: .88rem; line-height: 1.25; }
 .lines .meta { display: block; font-size: .75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.lines .meta.com { color: var(--ink); opacity: .8; }
 .lines .off { opacity: .5; }
 
 .badge { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; height: 30px; padding: 0 6px; border-radius: 4px; font: 700 1.15rem/1 var(--f-display); color: #fff; letter-spacing: .02em; text-shadow: 0 1px 1px rgba(0,0,0,.25); white-space: nowrap; }
@@ -1171,7 +1172,8 @@ function renderList() {
     ls.forEach(l => {
       const n = tripsOn(l, state.day);
       html += `<li><button data-line="${esc(l.id)}" aria-current="${state.line === l.id}"><span class="${n ? "" : "off"}">${badge(l)}</span>` +
-        `<span class="nm">${esc(l.nome)}<span class="meta">${n ? n + " corse in questo giorno" : "non attiva in questo giorno"}</span></span></button></li>`;
+        `<span class="nm">${esc(l.nome)}${(l.comuni || []).length ? `<span class="meta com">${esc(l.comuni.join(" · "))}</span>` : ""}` +
+        `<span class="meta">${n ? n + " corse in questo giorno" : "non attiva in questo giorno"}</span></span></button></li>`;
     });
   }
   if (!html) html = `<li><h3>Nessun risultato</h3></li>`;
@@ -1245,7 +1247,7 @@ function renderLine() {
 
   $("#pannello").innerHTML = `
     <div class="lhead">${badge(l)}<div><h2>${esc(l.nome)}</h2>
-      <div class="sub">${esc(l.area)}${l.km != null ? ` · percorso fino a ${l.km.toLocaleString("it-IT")} km` : ""} · <a href="#" id="tutte" style="color:var(--accent)">tutte le linee</a></div></div></div>
+      <div class="sub">${esc(l.area)}${(l.comuni || []).length > 1 || (l.comuni || [])[0] !== l.area ? ` · comuni: ${esc((l.comuni || []).join(", "))}` : ""}${l.km != null ? ` · percorso fino a ${l.km.toLocaleString("it-IT")} km` : ""} · <a href="#" id="tutte" style="color:var(--accent)">tutte le linee</a></div></div></div>
     <div class="bar">
       <div class="seg" role="group" aria-label="Calendario">${svcs.map(s => {
         const on = activeOn(s, state.day);
