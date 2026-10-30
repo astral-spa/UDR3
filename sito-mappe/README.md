@@ -38,6 +38,9 @@ colonna a parte); le fermate senza comune nel nome prendono quello della fermata
 Online (GitHub Pages) viene pubblicato **solo** `index.html`: script, modello, README e file GTFS restano nel
 repository e non sono raggiungibili dall'indirizzo del sito. La pagina non mostra il nome del file GTFS.
 
+Le visite sono contate con **GoatCounter** (account `andreaantonini`, https://andreaantonini.goatcounter.com):
+pagina e linee aperte (`#linea-…`), senza cookie. Lo script è in fondo a `template.html`.
+
 ## Aggiornare con un nuovo GTFS
 
 **Da GitHub**: *Add file → Upload files*, trascina il nuovo zip GTFS e fai *Commit changes* su `main`.
