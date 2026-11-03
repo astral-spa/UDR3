@@ -942,7 +942,17 @@ details.zone .dd small { color: var(--muted); margin-left: auto; font-variant-nu
 <script>
 // un orario per ogni GTFS: ognuno sostituisce il precedente dalla sua data di avvio (periodo.dal)
 const ORARI = /*DATI*/null;
-const GIORNO_URL = (new URLSearchParams(location.search).get("giorno") || "").match(/^\d{8}$/)?.[0] || null;
+// giorno scelto prima di ricaricare la pagina con l'altro orario: passa dalla sessione, non dall'indirizzo
+// (un vecchio link con ?giorno=… funziona ancora, ma il giorno viene tolto subito dall'indirizzo)
+let CAMBIO_ORARIO = false;  // pagina ricaricata dal sito stesso per il cambio di orario (non è una nuova visita)
+const GIORNO_URL = (() => {
+  let g = null;
+  try { g = sessionStorage.getItem("udr3-giorno"); sessionStorage.removeItem("udr3-giorno"); } catch (e) { /* sessione non disponibile */ }
+  CAMBIO_ORARIO = !!g;
+  const q = (new URLSearchParams(location.search).get("giorno") || "").match(/^\d{8}$/)?.[0];
+  if (q) { g = g || q; history.replaceState(null, "", location.pathname + location.hash); }
+  return g && /^\d{8}$/.test(g) ? g : null;
+})();
 const orarioDel = g => ORARI.find(o => g >= o.periodo.dal && g <= o.periodo.al) || (g < ORARI[0].periodo.dal ? ORARI[0] : ORARI[ORARI.length - 1]);
 const OGGI = (d => d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0"))(new Date());
 const D = orarioDel(GIORNO_URL || OGGI);
@@ -1829,7 +1839,8 @@ window.addEventListener("hashchange", () => apply(location.hash.replace(/^#linea
 /* ---------- giorno ---------- */
 function setDay(d) {
   if (d < D.periodo.dal || d > D.periodo.al) {  // giorno di un altro orario: si ricarica la pagina con quello
-    location.href = location.pathname + "?giorno=" + d + location.hash;
+    try { sessionStorage.setItem("udr3-giorno", d); location.reload(); }
+    catch (e) { location.href = location.pathname + "?giorno=" + d + location.hash; }  // senza sessione: nell'indirizzo (poi tolto)
     return;
   }
   state.day = d;
@@ -1867,8 +1878,8 @@ $("#giorno").addEventListener("change", e => {
 </script>
 <!-- statistiche visite (GoatCounter, senza cookie): un solo contatore per il sito, le linee aperte (#linea-…) non sono contate a parte -->
 <script>
-// una sola voce per il sito: niente ?giorno=… nel percorso, e il cambio di orario (che ricarica la pagina) non conta
-window.goatcounter = { path: () => location.pathname, no_onload: /[?&]giorno=/.test(location.search) };
+// una sola voce per il sito, e la ricarica per il cambio di orario non conta come nuova visita
+window.goatcounter = { path: () => location.pathname, no_onload: typeof CAMBIO_ORARIO !== "undefined" && CAMBIO_ORARIO };
 </script>
 <script data-goatcounter="https://andreaantonini.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </body>

@@ -58,7 +58,7 @@ Il workflow *Pubblica sito mappe* rigenera e ripubblica il sito in un paio di mi
 sostituisce il precedente a partire dalla data di avvio dei suoi calendari (la `start_date` più bassa di
 `calendar.txt`). Per esempio, con il GTFS attuale e uno nuovo con calendari dal 09/11/2026, scegliendo un giorno fino
 all'08/11 si vede l'orario attuale, dal 09/11 in poi quello nuovo; la pagina passa da sola all'orario giusto quando si
-cambia giorno. Se due zip hanno la stessa data di avvio vale quello caricato per ultimo. I vecchi zip si possono
+cambia giorno (ricaricandosi, senza mettere la data nell'indirizzo). Se due zip hanno la stessa data di avvio vale quello caricato per ultimo. I vecchi zip si possono
 cancellare quando il loro periodo è passato.
 
 **Dal computer** (serve solo Python 3):
