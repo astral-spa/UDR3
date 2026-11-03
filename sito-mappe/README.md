@@ -10,9 +10,8 @@ Sito con mappa interattiva e quadri orari della rete, generato dal GTFS. È un u
   VLMN Valmontone, ZGRL Zagarolo; le LA sono le linee intercomunali) con ricerca per linea, comune o fermata e
   numero di corse nel giorno scelto.
 - **Giorno**: si sceglie una data; linee, corse e partenze seguono i calendari.
-- **Calendari**: i giorni della settimana vengono da `calendar.txt`, la validità è imposta dal **14/09/2026
-  all'08/06/2027** (`VALIDITA` in testa a `build_data.py`) e si applicano le chiusure scolastiche di
-  `calendar_dates.txt` (8/12, vacanze di Natale e di Pasqua, 1/5, 2/6), indicate sotto ogni quadro orario.
+- **Calendari**: giorni della settimana e validità da `calendar.txt`, con le chiusure scolastiche di
+  `calendar_dates.txt` indicate sotto ogni quadro orario.
 - **Mappa** (sfondi Esri: stradale, topografica, grigio chiaro, satellite): percorsi della linea con frecce del
   senso di marcia, capolinea P/A, varianti di percorso evidenziabili, filtro per zone, schermo intero, stampa.
 - **Quadro orario** per calendario e direzione, con fermate principali o tutte; clic su una corsa per vederla
@@ -55,7 +54,12 @@ un solo contatore per tutto il sito (le linee aperte, `#linea-…`, non sono con
 
 **Da GitHub**: *Add file → Upload files*, trascina il nuovo zip GTFS e fai *Commit changes* su `main`.
 Il workflow *Pubblica sito mappe* rigenera e ripubblica il sito in un paio di minuti (scheda *Actions*).
-Il sito usa lo zip più recente presente nella radice del repo.
+**Un nuovo GTFS si può caricare in anticipo.** Il sito usa tutti gli zip presenti nella radice del repo: ogni GTFS
+sostituisce il precedente a partire dalla data di avvio dei suoi calendari (la `start_date` più bassa di
+`calendar.txt`). Per esempio, con il GTFS attuale e uno nuovo con calendari dal 09/11/2026, scegliendo un giorno fino
+all'08/11 si vede l'orario attuale, dal 09/11 in poi quello nuovo; la pagina passa da sola all'orario giusto quando si
+cambia giorno. Se due zip hanno la stessa data di avvio vale quello caricato per ultimo. I vecchi zip si possono
+cancellare quando il loro periodo è passato.
 
 **Dal computer** (serve solo Python 3):
 

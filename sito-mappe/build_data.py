@@ -34,8 +34,6 @@ TITOLO = "Rete bus UdR 3"
 # Vuoto = sito con i soli orari programmati.
 REALTIME = "https://udr-realtime.antonini1971.workers.dev"
 
-# validità imposta ai calendari (giorni della settimana da calendar.txt, chiusure da calendar_dates.txt)
-VALIDITA = ("20260914", "20270608")
 
 # raggruppamento delle linee per comune (dal prefisso del codice linea)
 COMUNI = {
@@ -65,6 +63,11 @@ GIORNI = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato",
 
 
 def find_gtfs():
+    """Zip GTFS della radice del repo -> [(data_inizio, percorso)] ordinati per data, uno per data.
+
+    Ogni GTFS vale dalla data di inizio dei suoi calendari (start_date più bassa di calendar.txt)
+    fino al giorno prima dell'inizio del GTFS successivo: un nuovo GTFS si può caricare in anticipo.
+    A parità di data di inizio vale lo zip caricato per ultimo (secondo git, altrimenti per data file)."""
     zips = glob.glob(os.path.join(ROOT, "*.zip"))
     if not zips:
         raise SystemExit("Nessun file .zip GTFS trovato nella radice del repo.")
@@ -77,16 +80,28 @@ def find_gtfs():
         except OSError:
             return 0
 
-    def calendar_end(path):
-        # a parità di commit (zip caricati insieme) vince il GTFS con il calendario che finisce più tardi
+    def calendar_range(path):
         try:
             zf = zipfile.ZipFile(path)
-            ends = [c["end_date"] for c in read(zf, "calendar.txt")] + [c["date"] for c in read(zf, "calendar_dates.txt")]
-            return max(ends) if ends else ""
+            cal = read(zf, "calendar.txt")
+            starts = [c["start_date"] for c in cal] or [c["date"] for c in read(zf, "calendar_dates.txt")]
+            ends = [c["end_date"] for c in cal] + [c["date"] for c in read(zf, "calendar_dates.txt")]
+            return (min(starts), max(ends)) if starts else None
         except (zipfile.BadZipFile, KeyError):
-            return ""
+            return None
 
-    return max(zips, key=lambda z: (committed(z), calendar_end(z), os.path.getmtime(z)))
+    per_data = {}
+    for z in zips:
+        rng = calendar_range(z)
+        if not rng:
+            print(f"Ignorato (non è un GTFS con calendario): {os.path.basename(z)}")
+            continue
+        key = (committed(z), rng[1], os.path.getmtime(z))
+        if rng[0] not in per_data or key > per_data[rng[0]][0]:
+            per_data[rng[0]] = (key, z)
+    if not per_data:
+        raise SystemExit("Nessun GTFS valido nella radice del repo.")
+    return sorted((d, z) for d, (_, z) in per_data.items())
 
 
 def read(zf, name):
@@ -271,7 +286,8 @@ def ymd(d):
     return d.strftime("%Y%m%d")
 
 
-def build(zpath):
+def build(zpath, inizio="00000000", fine="99999999"):
+    """Dati del sito per un GTFS, con i calendari limitati al periodo inizio–fine (inclusi)."""
     zf = zipfile.ZipFile(zpath)
     agency = (read(zf, "agency.txt") or [{}])[0]
     routes = read(zf, "routes.txt")
@@ -287,7 +303,8 @@ def build(zpath):
         v.sort(key=lambda r: int(r["stop_sequence"]))
     trips = [t for t in trips if st_by_trip.get(t["trip_id"])]
 
-    # ---- calendari: giorni da calendar.txt, validità imposta (VALIDITA), chiusure da calendar_dates.txt
+    # ---- calendari: giorni e validità da calendar.txt, chiusure da calendar_dates.txt,
+    # il tutto limitato al periodo in cui questo GTFS è in vigore (inizio–fine)
     flags = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
     removed, added = defaultdict(set), defaultdict(set)
     for x in cal_dates:
@@ -299,18 +316,19 @@ def build(zpath):
         if svc not in used:
             continue
         wd = {i for i, f in enumerate(flags) if c[f] == "1"}
-        d = datetime.datetime.strptime(VALIDITA[0], "%Y%m%d").date()
-        end = datetime.datetime.strptime(VALIDITA[1], "%Y%m%d").date()
+        dal, al = max(c["start_date"], inizio), min(c["end_date"], fine)
+        d = datetime.datetime.strptime(dal, "%Y%m%d").date()
+        end = datetime.datetime.strptime(al, "%Y%m%d").date()
         ds = set()
         while d <= end:
             if d.weekday() in wd:
                 ds.add(ymd(d))
             d += datetime.timedelta(days=1)
-        ds = sorted((ds - removed[svc]) | {x for x in added[svc] if VALIDITA[0] <= x <= VALIDITA[1]})
+        ds = sorted((ds - removed[svc]) | {x for x in added[svc] if dal <= x <= al})
         if not ds:
             continue
-        servizi[svc] = {"label": "Scolastico " + re.sub(r", (\w+)$", r" e \1", service_label(wd).lower()), "dal": VALIDITA[0], "al": VALIDITA[1],
-                        "esclusi": sorted(x for x in removed[svc] if VALIDITA[0] <= x <= VALIDITA[1]),
+        servizi[svc] = {"label": "Scolastico " + re.sub(r", (\w+)$", r" e \1", service_label(wd).lower()), "dal": dal, "al": al,
+                        "esclusi": sorted(x for x in removed[svc] if dal <= x <= al),
                         "date": ds, "giorni": len(ds), "scol": True}
     used_svc = list(servizi)
     labels = Counter(v["label"] for v in servizi.values())
@@ -318,6 +336,8 @@ def build(zpath):
         if labels[v["label"]] > 1:
             v["label"] += f" ({sv})"
     trips = [t for t in trips if t["service_id"] in servizi]
+    if not trips:
+        return None
 
     # ---- fermate usate
     names = stop_names(stops, {r["stop_id"] for t in trips for r in st_by_trip[t["trip_id"]]})
@@ -398,7 +418,7 @@ def build(zpath):
         "agenzia": {"nome": agency.get("agency_name", ""), "url": agency.get("agency_url", ""),
                     "tel": agency.get("agency_phone", "")},
         # nel sito pubblicato non compaiono il nome del file GTFS né dettagli tecnici
-        "feed": {"dal": min(all_dates), "al": max(all_dates)},
+        "periodo": {"dal": min(all_dates), "al": max(all_dates)},
         "servizi": servizi, "fermate": fermate, "shapes": shapes, "shape_km": shape_km, "linee": linee,
     }
 
@@ -483,12 +503,33 @@ def make_tab(svc, d, ts, st_by_trip, names, stop_idx, route_lines):
 
 
 def main():
-    zpath = sys.argv[1] if len(sys.argv) > 1 else find_gtfs()
-    print(f"GTFS: {os.path.basename(zpath)}")
-    data = build(zpath)
+    versioni = [("00000000", sys.argv[1])] if len(sys.argv) > 1 else find_gtfs()
+    dati = []
+    for i, (inizio, zpath) in enumerate(versioni):
+        fine = "99999999"
+        if i + 1 < len(versioni):
+            fine = ymd(datetime.datetime.strptime(versioni[i + 1][0], "%Y%m%d").date() - datetime.timedelta(days=1))
+        data = build(zpath, inizio, fine)
+        if not data:
+            print(f"GTFS: {os.path.basename(zpath)} — nessun giorno di servizio nel periodo, ignorato")
+            continue
+        data["file"] = os.path.basename(zpath)  # solo per il messaggio qui sotto, tolto prima di scrivere il sito
+        dati.append(data)
+    if not dati:
+        raise SystemExit("Nessun GTFS con giorni di servizio.")
+    # ogni versione copre i giorni fino all'inizio della successiva (domeniche comprese)
+    for a, b in zip(dati, dati[1:]):
+        a["periodo"]["al"] = ymd(datetime.datetime.strptime(b["periodo"]["dal"], "%Y%m%d").date() - datetime.timedelta(days=1))
+    feed = {"dal": dati[0]["periodo"]["dal"], "al": dati[-1]["periodo"]["al"]}
+    for d in dati:
+        d["feed"] = feed
+        n = sum(len(t["corse"]) for l in d["linee"] for t in l["tab"])
+        print(f"GTFS: {d.pop('file')} — in vigore dal {d['periodo']['dal']} al {d['periodo']['al']}: "
+              f"{len(d['linee'])} linee, {len(d['fermate'])} fermate, {n} corse")
+
     with open(os.path.join(HERE, "template.html"), encoding="utf-8") as f:
         html = f.read()
-    blob = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    blob = json.dumps(dati, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     with open(os.path.join(HERE, "logo.png"), "rb") as f:  # logo incluso nella pagina: online va solo index.html
         logo = "data:image/png;base64," + base64.b64encode(f.read()).decode()
     for old, new in (("/*DATI*/null", blob), ("/*TITOLO*/", TITOLO), ("/*LOGO*/", logo),
@@ -499,9 +540,7 @@ def main():
     for out in (os.path.join(HERE, "index.html"), os.path.join(ROOT, "index.html")):
         with open(out, "w", encoding="utf-8") as f:
             f.write(html)
-    n = sum(len(t["corse"]) for l in data["linee"] for t in l["tab"])
-    print(f"index.html: {len(html.encode()) / 1024:.0f} KB — {len(data['linee'])} linee, {len(data['fermate'])} fermate, "
-          f"{n} corse, dal {data['feed']['dal']} al {data['feed']['al']}")
+    print(f"index.html: {len(html.encode()) / 1024:.0f} KB — {len(dati)} orari, dal {feed['dal']} al {feed['al']}")
 
 
 if __name__ == "__main__":
