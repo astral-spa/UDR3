@@ -1881,7 +1881,8 @@ $("#giorno").addEventListener("change", e => {
 <!-- statistiche visite (GoatCounter, senza cookie): un solo contatore per il sito, le linee aperte (#linea-…) non sono contate a parte -->
 <script>
 // una sola voce per il sito, e la ricarica per il cambio di orario non conta come nuova visita
-window.goatcounter = { path: () => location.pathname, no_onload: typeof CAMBIO_ORARIO !== "undefined" && CAMBIO_ORARIO };
+// percorso fisso: con il dominio proprio il sito è alla radice, le visite restano su "/UDR3/" come prima
+window.goatcounter = { path: () => "/UDR3/", no_onload: typeof CAMBIO_ORARIO !== "undefined" && CAMBIO_ORARIO };
 </script>
 <script data-goatcounter="https://andreaantonini.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </body>
